@@ -5,4 +5,18 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+# https://stackoverflow.com/questions/26946646/package-with-both-a-library-and-a-binary
+[lib]
+name = "sailboat_simulatore"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sailboat_simulator"
+path = "src/bin.rs"
+
 [dependencies]
+serde = {version = "1.0.197", features = ["derive", "rc"]}# https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
+serde_json = "1.0.114"
+renet = "0.0.15"
+local-ip-address = "0.5.6"
+nalgebra = {version = "^0.32", features = ["serde-serialize", "convert-glam025"]}
