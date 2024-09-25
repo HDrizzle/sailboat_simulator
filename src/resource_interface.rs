@@ -5,44 +5,101 @@ use crate::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
-const RESOURCES_DIR: &str = "resources";
+// CONSTS
+const RESOURCES_DIR: &str = "resources/";
+const MAPS_DIR: &str = "maps/";
+const BOAT_TYPES_DIR: &str = "boat_types/";
+const SIMULATIONS_DIR: &str = "simulations/";
+const GLOBAL_SETTINGS_FILE: &str = "global_settings";// No ".json" because it will be added automatically
+
+/// Meant for when a resource can't be loaded
+pub struct ResourceLoadError {
+	resource_type: ResourceType,
+	full_path: String,
+	name: String,
+	message: Option<String>,
+	error_type: ResourceLoadErrorType
+}
+
+pub enum ResourceLoadErrorType {
+	CannotFindFile,
+	NoPermission,
+	CannotDecode
+}
+
+// Resource types
+pub enum ResourceType {
+	Map,
+	BoatType,
+	Simulation,
+	GlobalSettings
+}
+
+pub enum Resource {
+	Map(MapSave),
+	BoatType(BoatType),
+	Simulation(SimulationSave),
+	GlobalSettings(Settings)
+}
+
+impl ResourceType {
+	pub fn encoding(&self) -> ResourceEncoding {
+		self.type_info().0
+	}
+	pub fn load(&self, name: &str) -> Result<Resource> {
+		let type_info = self.type_info();
+		let full_path: String = match type_info.2 {
+			true => format!("{}{}{}{}", RESOURCES_DIR, &type_info.1, name, type_info.0.extension()),// Within a folder
+			false => format!("{}{}{}", RESOURCES_DIR, &type_info.1, type_info.0.extension())// Standalone file (ex: settings), don't need `name`
+		};
+	}
+	/// (Resource encoding, path, whether the path is a folder (true) or file (false))
+	fn type_info(&self) -> (ResourceEncoding, &'static str, bool) {
+		match &self {
+			Self::Map => (ResourceEncoding::JSON, MAPS_DIR, true),
+			Self::BoatType => (ResourceEncoding::JSON, BOAT_TYPES_DIR, true),
+			Self::Simulation => (ResourceEncoding::JSON, SIMULATIONS_DIR, true),
+			Self::GlobalSettings => (ResourceEncoding::JSON, GLOBAL_SETTINGS_FILE, false),
+		}
+	}
+}
+
+pub enum ResourceEncoding {
+	JSON,
+	Plaintext,
+	PNG
+}
+
+impl ResourceEncoding {
+	pub fn extension(&self) -> String {
+		match &self {
+			Self::JSON => String::from(".json"),
+			Self::Plaintext => String::from(".txt"),
+			Self::PNG => String::from(".png")
+		}
+	}
+	pub fn load<T>(&self) -> Result<T, String> {
+		// TODO
+	}
+}
+
+// Loading
+pub fn load_boat_type(name: &str) -> Result<BoatType, String> {
+	let raw_string: String = load_file_with_better_error(&(VEHICLES_DIR.to_owned() + name + "/" + VEHICLE_STATIC_JSON_FILENAME))?;
+	let vehicle: VehicleStatic = serde_json::from_str(&raw_string)?;
+	Ok(vehicle)
+}
 
 #[derive(Serialize, Deserialize)]
-struct Settings {
+pub struct Settings {
 	/// Simulation settings
-	pub simulator: SimulatorSettings,
+	pub simulator: SimulationSettings,
 	/// GUI & frontend settings
 	pub gui: GuiSettings,
 }
 
 #[derive(Serialize, Deserialize)]
-struct SimulatorSettings {
-	/// Whether to save the simulation when it is quit or when there is an error.
-	pub save_sims: bool,
-	/// Maximum amount to step simulation if it is running slow
-	pub max_time_step: Float,
-	/// Limit on how fast the autopilot can move the rudder, in degrees/second
-	pub max_rudder_movement: Float,
-	/// Resolution of the path tracer, boat has to this far away from the previous point to record a new point
-	pub tracer_resulution: Float,
-	/// Whether boat tracer is enabled
-	pub tracer_enabled: bool,
-	/// Time for a client to not be responding for them to be considered disconnected
-	pub client_timeout: Float,
-	/// Upper limits to prevent the simulation from getting out of control
-	pub sanity_limits: SimulatorSanityLimits
-}
-
-#[derive(Serialize, Deserialize)]
-struct SimulatorSanityLimits {
-	/// Max speed
-	pub speed: Float,
-	/// Max angular speed, degrees/sec
-	pub angular_speed: Float
-}
-
-#[derive(Serialize, Deserialize)]
-struct GuiSettings {
+pub struct GuiSettings {
 	/// Whether to floodfill land on main map, may reduce performance
 	pub floodfil_land: bool,
 	/// Whether to show the true wind vector
@@ -69,7 +126,7 @@ struct GuiSettings {
 
 /// GUI Color Settings, all colors stored as a [u8; 4] represeenting [Red, Green, Blue, Alpha]
 #[derive(Serialize, Deserialize)]
-struct GuiColors {
+pub struct GuiColors {
 	pub true_wind: [u8; 4],
 	pub app_wind: [u8; 4],
 	pub drag_force: [u8; 4],
@@ -86,7 +143,7 @@ struct GuiColors {
 }
 
 #[derive(Serialize, Deserialize)]
-struct UserContact {
+pub struct UserContact {
 	pub username: String,
 	pub password: String,
 	pub blocked: String
@@ -95,7 +152,7 @@ struct UserContact {
 /// A map is sort of a template to base simulations off of, NOTE: A simulation is stored seperate from any map it may use
 /// Maps are read-only and are not written to when a simulation is saved
 #[derive(Serialize, Deserialize)]
-struct MapSave {
+pub struct MapSave {
 	pub size: IntV2,
 	pub global_default_start: V2,
 	pub end: V2,
@@ -103,80 +160,11 @@ struct MapSave {
 }
 
 #[derive(Serialize, Deserialize)]
-struct LandmassSave {
+pub struct LandmassSave {
 	/// List of coordinates to make up coastline, it does NOT have to have the same coordinate at the start and end points
 	pub coastline: Vec<V2>,
 	/// If it has a name, and where to display it on the map
 	pub name_and_representative_point_opt: Option<(V2, String)>,
 	/// Color of specific landass, overrides default color
 	pub color: [u8; 4]
-}
-
-/// Simulation "save-file"
-#[derive(Serialize, Deserialize)]
-struct SimulationSave {
-	pub map_name: String,
-	pub local_settings_opt: Option<SimulatorSettings>,
-	pub paused: bool,
-	pub password: Option<String>,
-	pub clients: HashMap<String, SimulationClientSave>
-}
-
-#[derive(Serialize, Deserialize)]
-struct SimulationClientSave {
-	pub has_finished: bool,
-	pub paused: bool,
-	pub tracer_list: Vec<V2>,
-	pub time_since_reset: Float,
-	pub autopilot_enabled: bool,
-	pub autopilot_state: crate::autopilot::AutopilotSave,
-	pub boat_start: BoatSaveState,
-	pub boat: BoatSaveState,
-	pub wind: WindGeneratorSaveState,
-	/// Time since latest global reset
-	pub time: Float,
-	/// Best time on the course
-	pub best_time: Float
-}
-
-#[derive(Serialize, Deserialize)]
-struct BoatSaveState {
-	/// Name of static boat type file (without .json)
-	pub type_name: String,
-	/// Displacement, angle
-	pub pos: Iso,
-	/// Velocity, angular velocity
-	pub vel: Iso,
-	/// Rudder angle
-	pub rudder_angle: Float,
-	/// Rudder hit-points
-	pub rudder_hp: bool,
-	/// Hull hit-points
-	pub hull_hp: Float,
-	/// Sails
-	pub sails: GenericDataset<SailSaveState>
-}
-
-#[derive(Serialize, Deserialize)]
-struct SailSaveState {
-	/// Current angle relative to a line from the mast pointing straight aft, + = CCW, - = CW
-	pub angle: Float,
-	/// Maximum value of |angle|, always positive
-	pub sheeting_angle: Float
-}
-
-#[derive(Serialize, Deserialize)]
-struct WindGeneratorSaveState {
-	/// Speed average, m/s
-	pub speed_average: Float,
-	/// Maximum gust, m/s
-	pub max_gust: Float,
-	/// Max speed variation in m/s^s
-	pub max_speed_variation: Float,
-	/// Max direction variation in degrees/s^2
-	pub max_direction_variation: Float,
-	/// Current speed
-	pub speed: Float,
-	/// Current direction
-	pub direction: Float
 }

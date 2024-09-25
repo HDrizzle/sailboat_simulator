@@ -2,8 +2,7 @@
 
 use crate::prelude::*;
 use serde::{Deserialize, Serialize};
-
-pub mod simulator;
+use rouille;// Simple HTTP Server
 
 /// All possible requests to the Renet server
 #[derive(Serialize, Deserialize)]
@@ -15,4 +14,10 @@ pub enum RenetRequest {
 #[derive(Serialize, Deserialize)]
 pub enum RenetResponse {
 	
+}
+
+/// Main server
+pub struct WorldServer {
+    sim_name: String,
+    sim: Simulation
 }

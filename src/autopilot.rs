@@ -11,3 +11,9 @@ pub struct Autopilot {
 pub struct AutopilotSave {
 	// TODO
 }
+
+/// Autopilot input from client
+#[derive(Serialize, Deserialize)]
+pub struct AutopilotInputs {
+	// TODO
+}
